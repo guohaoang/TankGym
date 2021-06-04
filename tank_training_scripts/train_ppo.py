@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-# Train single CPU PPO1 on slimevolley.
-# Should solve it (beat existing AI on average over 1000 trials) in 3 hours on single CPU, within 3M steps.
-
 import os
 import gym
 import tankgym
