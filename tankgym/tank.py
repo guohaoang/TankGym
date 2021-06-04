@@ -1,13 +1,10 @@
 """
-Port of Neural Slime Volleyball to Python Gym Environment
+TankGym environment adapted from SlimeVolleyGym.
 
-David Ha (2020)
-
-Original version:
-
-https://otoro.net/slimevolley
-https://blog.otoro.net/2015/03/28/neural-slime-volleyball/
-https://github.com/hardmaru/neuralslimevolley
+Most of the functions dealing with graphics are identical to those from SlimeVolleyGym.
+The Bullet, RelativeState, Agent, Game, and all BaselinePolicy classes are new and are
+different from analogous classes in SlimeVolleyGym. The TankGymEnv is structurally
+similar to SlimeVolleyEnv, but is modified to work with the new Game class.
 
 No dependencies apart from Numpy and Gym
 """
@@ -58,7 +55,7 @@ MAX_DIST = math.sqrt(2) * REF_W
 MAX_BULLETS = math.ceil((BULLET_RADIUS * 2 + MAX_DIST)/(MIN_BALL_SPEED * TIMESTEP * COOLDOWN))
 BULLET_SPREAD = 0
 
-MAXLIVES = 3 # game ends when one agent loses this many games
+MAXLIVES = 3 # game ends when one agent loses this many lives
 
 WINDOW_WIDTH = 500
 WINDOW_HEIGHT = 500
@@ -73,7 +70,6 @@ PIXEL_SCALE = 4 # first render at multiple of Pixel Obs resolution, then downsca
 PIXEL_WIDTH = 84*2*1
 PIXEL_HEIGHT = 84*1
 
-# by default, don't load rendering (since we want to use it in headless cloud machines)
 rendering = None
 def checkRendering():
   global rendering
@@ -280,7 +276,6 @@ class RelativeState:
     for ball in oppballs:    result += ball
     scaleFactor = 10.0  # scale inputs to be in the order of magnitude of 10 for neural network.
     result = np.array(result) * scaleFactor
-    # print(result, np.shape(result))
     return result
 
 class Agent:
@@ -307,7 +302,6 @@ class Agent:
           self.vx /= toDivide
           self.vy /= toDivide
   def setAction(self, action):
-      # print(action)
       dy = self.state.oy - self.state.y
       dx = self.state.ox - self.state.x
       degreeToFace = math.atan2(dy, dx)
@@ -324,8 +318,6 @@ class Agent:
           vx = self.vx + dx * BALL_SPEED
           vy = self.vy + dy * BALL_SPEED
           self.primedbullet = Bullet(x, y, vx, vy, BULLET_RADIUS, self.c)
-          # self.vx -= vx
-          # self.vy -= vy
 
 
   def move(self):
@@ -404,7 +396,7 @@ class Agent:
     return canvas
 
 class BaselinePolicy:
-  """ Tiny RNN policy with only 120 parameters of otoro.net/slimevolley agent """
+  """ Simple policy that aims but does not move """
   def __init__(self):
     self.inputState = None
     pass
@@ -417,7 +409,6 @@ class BaselinePolicy:
   def _getAction(self):
     return [0, 0, 0, 1]
   def predict(self, obs):
-    """ take obs, update rnn state, return action """
     self._setInputState(obs)
     self._forward()
     return self._getAction()
@@ -441,8 +432,7 @@ class BaselineRandWAim(BaselinePolicy):
 
 class Game:
   """
-  the main slime volley game.
-  can be used in various settings, such as ai vs ai, ai vs human, human vs human
+  the main tank game
   """
   def __init__(self, train_rewards, np_random=np.random):
     self.bullets_good = None
@@ -486,7 +476,6 @@ class Game:
     extrareward = 0
 
     truedir = math.atan2(self.agent_bad.y - self.agent_good.y, self.agent_bad.x - self.agent_good.x)
-    # extrareward += 0.5-abs(truedir-self.agent_good.dirpt)/(2*math.pi)
 
     if self.agent_good.primedbullet is not None:
         self.bullets_good.append(self.agent_good.primedbullet)
@@ -552,25 +541,13 @@ class Game:
 
 class TankGymEnv(gym.Env):
   """
-  Gym wrapper for Slime Volley game.
+  Gym wrapper for Tank Gym game.
 
-  By default, the agent you are training controls the right agent
-  on the right. The agent on the left is controlled by the baseline
-  RNN policy.
+  By default, the agent you are training controls agent_good while agent_bad
+  is embedded in the environment.
 
-  Game ends when an agent loses 5 matches (or at t=3000 timesteps).
-
-  Note: Optional mode for MARL experiments, like self-play which
-  deviates from Gym env. Can be enabled via supplying optional action
-  to override the default baseline agent's policy:
-
-  obs1, reward, done, info = env.step(action1, action2)
-
-  the next obs for the right agent is returned in the optional
-  fourth item from the step() method.
-
-  reward is in the perspective of the right agent so the reward
-  for the left agent is the negative of this number.
+  Reward is in the perspective of agent_good so the reward for the left agent is
+  the negative of this number (if train_rewards is false)
   """
   metadata = {
     'render.modes': ['human', 'rgb_array', 'state'],
@@ -582,29 +559,11 @@ class TankGymEnv(gym.Env):
   multiagent = True # optional args anyways
 
   def __init__(self):
-    """
-    Reward modes:
-
-    net score = right agent wins minus left agent wins
-
-    0: returns net score (basic reward)
-    1: returns 0.01 x number of timesteps (max 3000) (survival reward)
-    2: sum of basic reward and survival reward
-
-    0 is suitable for evaluation, while 1 and 2 may be good for training
-
-    Setting multiagent to True puts in info (4th thing returned in stop)
-    the otherObs, the observation for the other agent. See multiagent.py
-
-    Setting self.from_pixels to True makes the observation with multiples
-    of 84, since usual atari wrappers downsample to 84x84
-    """
 
     self.t = 0
     self.t_limit = 3000
     self.epnum = 0
 
-    #self.action_space = spaces.Box(0, 1.0, shape=(3,))
     self.action_space = ACTION_SPACE
 
     if self.from_pixels:
